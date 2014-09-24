@@ -1,0 +1,39 @@
+#!/bin/sh
+ORIG_LIB_DIR=".build/rabbitmq"
+
+echo "* Checking if rabbitmq source exists..."
+# Check if the lib dir exists
+if [ ! -d "${ORIG_LIB_DIR}" ]; then
+    echo "* It doesn't. Cloning..."
+    git clone https://github.com/rabbitmq/rabbitmq-erlang-client.git ${ORIG_LIB_DIR}
+fi
+# Update the source lib
+(cd ${ORIG_LIB_DIR} && git fetch origin)
+LATEST_TAG=$(cd ${ORIG_LIB_DIR} && git describe --abbrev=0 --tags)
+echo "Checking out tag ${LATEST_TAG}"
+(cd $ORIG_LIB_DIR && git checkout ${LATEST_TAG})
+
+echo "* Cleaning old files."
+rm src/*.erl
+rm include/*
+
+echo "Copying include files."
+cp -r ${ORIG_LIB_DIR}/include/*.hrl ./include
+
+echo "Copying source files."
+cp -r ${ORIG_LIB_DIR}/src/*.erl ./src
+
+echo "* Please review the following changes:"
+git add .
+git status
+echo "OK? (y/n)"
+read -n 1 OK
+echo -e "\n"
+if [ "${OK}" != "y" ]; then
+    exit 1
+fi
+
+#git commit -m "NEW Bumped RabbitMQ version to ${LATEST_TAG}"
+#git tag ${LATEST_TAG}
+#git push origin master
+#git push origin --tags
