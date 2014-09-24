@@ -1,5 +1,5 @@
 {deps, [
-	{rabbit_common, ".*", {git, "git://github.com/kevin-spil/rabbit_common.git", {tag, "rabbitmq_v3_3_5"}}}
+	{rabbit_common, ".*", {git, "git://github.com/kevin-spil/rabbit_common.git", {tag, "%%VERSION%%"}}}
 ]}.
 
 {erl_opts, [

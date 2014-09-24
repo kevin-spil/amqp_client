@@ -23,6 +23,9 @@ cp -r ${ORIG_LIB_DIR}/include/*.hrl ./include
 echo "Copying source files."
 cp -r ${ORIG_LIB_DIR}/src/*.erl ./src
 
+echo "* Updating rebar.config"
+sed "s/%%VERSION%%/${LATEST_TAG}/g" rebar.config.in > rebar.config
+
 echo "* Please review the following changes:"
 git add .
 git status
@@ -33,7 +36,7 @@ if [ "${OK}" != "y" ]; then
     exit 1
 fi
 
-#git commit -m "NEW Bumped RabbitMQ version to ${LATEST_TAG}"
-#git tag ${LATEST_TAG}
-#git push origin master
-#git push origin --tags
+git commit -m "NEW Bumped RabbitMQ version to ${LATEST_TAG}"
+git tag ${LATEST_TAG}
+git push origin master
+git push origin --tags
