@@ -1,42 +1,144 @@
-#!/bin/sh
+#!/bin/bash
+
+set -euo pipefail
+
 ORIG_LIB_DIR=".build/rabbitmq"
 
-echo "* Checking if rabbitmq source exists..."
-# Check if the lib dir exists
-if [ ! -d "${ORIG_LIB_DIR}" ]; then
-    echo "* It doesn't. Cloning..."
-    git clone https://github.com/rabbitmq/rabbitmq-erlang-client.git ${ORIG_LIB_DIR}
-fi
-# Update the source lib
-(cd ${ORIG_LIB_DIR} && git fetch origin)
-LATEST_TAG=$(cd ${ORIG_LIB_DIR} && git describe --abbrev=0 --tags)
-echo "Checking out tag ${LATEST_TAG}"
-(cd $ORIG_LIB_DIR && git checkout ${LATEST_TAG})
+# Clones the RabbitMQ client when it is missing
+# Params: None
+function get_rmq_client {
+    echo "* Checking if rabbitmq source exists..."
+    # Check if the lib dir exists
+    if [ ! -d "${ORIG_LIB_DIR}" ]; then
+	echo "* It doesn't. Cloning..."
+	git clone https://github.com/rabbitmq/rabbitmq-erlang-client.git ${ORIG_LIB_DIR}
+    fi
+}
 
-echo "* Cleaning old files."
-rm src/*.erl
-rm include/*
+# Updates the client to the latest version
+# Params: None
+function update_rmq_client {
+    # Update the source lib
+    (cd ${ORIG_LIB_DIR} && git fetch origin)
+    (cd ${ORIG_LIB_DIR} && git checkout master)
+    (cd ${ORIG_LIB_DIR} && git pull origin master)
+}
 
-echo "Copying include files."
-cp -r ${ORIG_LIB_DIR}/include/*.hrl ./include
+# Checks out the supplied tag
+# Params: Tag to check out
+function checkout_tag {
+    local latest_tag=$1
 
-echo "Copying source files."
-cp -r ${ORIG_LIB_DIR}/src/*.erl ./src
+    echo "Checking out tag ${latest_tag}"
+    (cd $ORIG_LIB_DIR && git checkout ${latest_tag})
+}
 
-echo "* Updating rebar.config"
-sed "s/%%VERSION%%/${LATEST_TAG}/g" rebar.config.in > rebar.config
+# Removes the old files to ensure that deprecated files are removed
+# Params: None
+function remove_old_files {
+    echo "* Cleaning old files."
+    # Use -f since these files might not be present
+    rm -f src/*.erl
+    rm -f include/*
+}
 
-echo "* Please review the following changes:"
-git add .
-git status
-echo "OK? (y/n)"
-read -n 1 OK
-echo -e "\n"
-if [ "${OK}" != "y" ]; then
-    exit 1
-fi
+# Copies the new files from the rmq client
+# Params: None
+function copy_files {
+    echo "* Copying include files."
+    cp -r ${ORIG_LIB_DIR}/include/*.hrl ./include
 
-git commit -m "NEW Bumped RabbitMQ version to ${LATEST_TAG}"
-git tag ${LATEST_TAG}
-git push origin master
-git push origin --tags
+    echo "* Copying source files."
+    cp -r ${ORIG_LIB_DIR}/src/*.erl ./src
+}
+
+# Changes the rebar.config dependency to the current tag to ensure the correct common library is loaded
+# Params: The tag to use
+function update_rebar_config {
+    local latest_tag=$1
+    echo "* Updating rebar.config"
+    sed "s/%%VERSION%%/${latest_tag}/g" rebar.config.in > rebar.config
+}
+
+# Update the version of this library
+# Params: The tag to use
+function update_app_src {
+    local latest_tag=$1
+    echo "* Updating app.src"
+    sed "s/%%VERSION%%/${latest_tag}/g" src/amqp_client.app.src.in > src/amqp_client.app.src
+}
+
+# Allows the user to review the changes that this script makes
+# Params: None
+function review {
+    echo "* Please review the following changes:"
+    git add .
+    git status
+    echo "OK? (y/n)"
+    read -n 1 OK
+    echo -e "\n"
+    if [ "${OK}" != "y" ]; then
+	exit 1
+    fi
+}
+
+# Make the commit.
+# Params: The current tag
+function commit {
+    local latest_tag=$1
+    git commit -m "NEW Bumped RabbitMQ version to ${latest_tag}"
+}
+
+# Create a tag
+# Params: The tag
+function tag {
+    local latest_tag=$1
+    git tag ${latest_tag}
+}
+
+# Push the changes to the remote repository
+# Params: None
+function push {
+    git push origin master
+    git push origin --tags
+}
+
+# Determine whether to make a commit or not
+# Params: The current client tag
+function create_tag {
+    local latest_tag=$1
+    local current_tag=$(git describe --abbrev=0 --tags)
+    if [ "${latest_tag}"="${current_tag}" ]; then
+	echo "A tag with this rmq version already exists. Overwrite?"
+	read -n 1 overwrite
+	printf "\n"
+	if [ "${overwrite}" != "y" ]; then
+	    push
+	else
+	    commit ${latest_tag}
+	    git tag -f ${latest_tag}
+	    git push origin master
+	    git push origin --tags -f
+	fi
+    else
+	commit ${latest_tag}
+	tag ${latest_tag}
+	push
+    fi
+}
+
+function main {
+    get_rmq_client
+    update_rmq_client
+
+    local latest_tag=$(cd ${ORIG_LIB_DIR} && git describe --abbrev=0 --tags)
+    checkout_tag ${latest_tag}
+    remove_old_files
+    copy_files
+    update_rebar_config ${latest_tag}
+    update_app_src ${latest_tag}
+    review
+    create_tag ${latest_tag}
+}
+
+main
