@@ -76,7 +76,7 @@ function review {
     git status
     echo "OK? (y/n)"
     read -n 1 OK
-    echo -e "\n"
+    printf "\n"
     if [ "${OK}" != "y" ]; then
 	exit 1
     fi
